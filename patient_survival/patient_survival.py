@@ -43,5 +43,5 @@ x_column_indexes = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
 #Loop and clean the data
 for x in master_df.columns[x_column_indexes]:
-    master_df = clean_col(x)
+    clean_col(x)
 
