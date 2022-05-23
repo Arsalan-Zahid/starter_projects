@@ -58,7 +58,7 @@ def clean_col(col):
 
 
 
-x_column_indexes = [4, 7, 8, 10, 11, 13, 14]
+x_column_indexes = [4, 5, 6, 7, 8, 10, 11, 13, 14]
 x_orig = master_df.iloc[:, x_column_indexes]
 #Loop and clean the data
 for col in master_df.columns[x_column_indexes]:
@@ -75,13 +75,6 @@ y_orig = master_df.loc[:, "hospital_death"]#.drop(["index"], axis=1)
 #x_orig = np.asarray(x_orig).astype('float32')
 #y_orig = np.asarray(y_orig).astype('float32')
 
-feature_cols = []
-
-
-bucketized_feature_column = tf.feature_column.bucketized_column(tf.feature_column.numeric_column("age"), boundaries=[30, 40, 50, 60, 70, 80, 90])
-feature_cols.append(bucketized_feature_column)
-
-
 
 
 
@@ -90,18 +83,10 @@ feature_cols.append(bucketized_feature_column)
 
 x_train, x_test, y_train, y_test = train_test_split(x_orig, y_orig, test_size=0.2)
 
-#As array
-"""
-x_train = np.asarray(x_train).astype('float32')
-y_train = np.asarray(y_train).astype('float32')
-x_test = np.asarray(x_test).astype('float32')
-y_test = np.asarray(y_test).astype('float32')"""
 
-feature_layer = tf.keras.layers.DenseFeatures(feature_cols)
 
 #Get the model and start adding layers
 model = tf.keras.models.Sequential()
-model.add(feature_layer)
 model.add(tf.keras.layers.Dense(128, activation="sigmoid"))
 model.add(tf.keras.layers.Dense(64, activation="sigmoid"))
 model.add(tf.keras.layers.Dense(64, activation="sigmoid"))
@@ -112,11 +97,7 @@ assert not np.any(np.isnan(x_train))
 adam = tf.keras.optimizers.Adam(learning_rate=0.01)
 model.compile(optimizer=adam, loss="binary_crossentropy", metrics=["accuracy"])
 
-columns = x_train.columns.to_list()
 
-features = tf.io.parse_example(
-    ..., features=tf.feature_column.make_parse_example_spec(columns))
-
-model.fit(feature_layer(features), feature_layer(features), epochs = 100, batch_size=10000)
+model.fit(x_train, y_train, epochs = 100, batch_size=10000)
 model.evaluate(x_test, y_test)
 print(True)
