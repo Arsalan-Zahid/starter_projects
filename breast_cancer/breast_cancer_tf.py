@@ -2,7 +2,7 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 
-master_df = pd.read_csv("./breast_cancer_data.csv")
+master_df = pd.read_csv("./breast_cancer/breast_cancer_data.csv")
 
 #Change strings to integers
 
