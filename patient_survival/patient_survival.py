@@ -2,102 +2,109 @@ import pandas as pd
 import numpy as np
 import os
 from pandas.api.types import is_object_dtype, is_numeric_dtype
-
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 import tensorflow as tf
-
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler
-
-
-#Get dataset
 
 master_df = pd.read_csv(os.path.join(os.path.dirname(__file__), "dataset.csv"))
 
 #quickly, drop any values that don't have a y value
 master_df.dropna(subset=["hospital_death"], inplace=True)
 
-#FIRST, CLEAN THE DF AND OHE
 
-
-cols_to_drop = []
-x_orig = None
-
-def clean_col(col):
-    "Cleans one column from master_df."
-    
-    global x_orig
-    
-
-
-    raw_data = x_orig.loc[:, col]
-    
-
-    #If it is a string, then just put the mode in there
-    if is_object_dtype(x_orig[col]):
-        replacement = raw_data.mode()
-        #Else, if it is a median (meaning numerical), set the values to the median.
-    elif is_numeric_dtype(x_orig[col]):
-        replacement = raw_data.median()
-    else:
-        raise ValueError("Not an str, nor a number")
-
-
-    #If it is a string: 
-    if is_object_dtype(x_orig[col]):
-
-        #OHE, store names in list,
-        OHE_df = pd.get_dummies(x_orig[col], prefix=col)
-        cols_to_drop.append(col)
-        #Append to master_df.
-        x_orig = pd.concat([x_orig, OHE_df], axis=1)
-
-
-    #Replace the values
-    x_orig.loc[:, col].replace(["NA", np.NAN], [replacement, replacement], inplace=True)
-
-
-
+#Get original data
 x_column_indexes = [4, 5, 6, 7, 8, 10, 11, 13, 14]
 x_orig = master_df.iloc[:, x_column_indexes]
-#Loop and clean the data
-for col in master_df.columns[x_column_indexes]:
-    clean_col(col)
+y_orig = master_df.iloc[:, 3]
 
 
 
-#Now, remove any string columns from x
-x_orig.drop(cols_to_drop, axis=1, inplace=True)
-y_orig = master_df.loc[:, "hospital_death"]#.drop(["index"], axis=1)
+from sklearn.impute import SimpleImputer
 
 
-#___________________________________________________________________________________________________________________
-#x_orig = np.asarray(x_orig).astype('float32')
-#y_orig = np.asarray(y_orig).astype('float32')
+object_cols = [col for col in x_orig.columns if is_object_dtype(x_orig[col])]
+numeric_cols = [col for col in x_orig.columns if is_numeric_dtype(x_orig[col])]
 
 
-
-
-#Now, split the data
-#print(x_orig.to_dict())
-
-x_train, x_test, y_train, y_test = train_test_split(x_orig, y_orig, test_size=0.2)
+from sklearn.compose import make_column_transformer
 
 
 
-#Get the model and start adding layers
-model = tf.keras.models.Sequential()
-model.add(tf.keras.layers.Dense(128, activation="sigmoid"))
-model.add(tf.keras.layers.Dense(64, activation="sigmoid"))
-model.add(tf.keras.layers.Dense(64, activation="sigmoid"))
-model.add(tf.keras.layers.Dense(1, activation="sigmoid"))
-
-#compile
-assert not np.any(np.isnan(x_train))
-adam = tf.keras.optimizers.Adam(learning_rate=0.01)
-model.compile(optimizer=adam, loss="binary_crossentropy", metrics=["accuracy"])
+#split data
+from sklearn.model_selection import train_test_split
 
 
-model.fit(x_train, y_train, epochs = 100, batch_size=10000)
-model.evaluate(x_test, y_test)
-print(True)
+
+transformer_num = make_pipeline(
+    SimpleImputer(strategy="constant"),
+    StandardScaler(),
+)
+transformer_cat = make_pipeline(
+    SimpleImputer(strategy="constant", fill_value="NA"),
+    OneHotEncoder(handle_unknown='ignore'),
+)
+
+preprocessor = make_column_transformer(
+    (transformer_num, numeric_cols),
+    (transformer_cat, object_cols),
+)
+
+# stratify - make sure classes are evenlly represented across splits
+X_train, X_valid, y_train, y_valid = \
+    train_test_split(x_orig, y_orig, stratify=y_orig, train_size=0.75)
+
+X_train = preprocessor.fit_transform(X_train)
+X_valid = preprocessor.transform(X_valid)
+
+input_shape = [X_train.shape[1]]
+
+
+
+
+
+#Build model
+from tensorflow.keras import layers
+
+model = tf.keras.models.Sequential([
+    layers.BatchNormalization(input_shape=(X_train.shape[1],)),
+
+    layers.Dense(256, activation="relu"),
+    layers.BatchNormalization(),
+    layers.Dropout(0.3),
+
+    layers.Dense(256, activation="relu"),
+    layers.BatchNormalization(),
+    layers.Dropout(0.3),
+
+    layers.Dense(1, activation="sigmoid")
+
+])
+
+#Compile
+model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["binary_accuracy"])
+
+#Get early stopping
+early_stopping = tf.keras.callbacks.EarlyStopping(
+    patience=5,
+    min_delta=0.001,
+    restore_best_weights=True,
+    monitor="binary_accuracy"
+)
+
+X_train = X_train.toarray()
+X_valid = X_valid.toarray()
+
+#fit the data
+history = model.fit(X_train, y_train,
+    validation_data=(X_valid, y_valid),
+    batch_size=1000,
+    epochs=400,
+    callbacks = [early_stopping])
+
+history_df = pd.DataFrame(history.history)
+
+history_df.loc[:, ["loss", "val_loss"]].plot(title="cross-entropy")
+history_df.loc[:, ["binary_accuracy", "val_binary_accuracy"]].plot(title="accuracy")
+
+from matplotlib.pyplot import show
+show()
