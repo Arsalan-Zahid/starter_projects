@@ -48,3 +48,64 @@ targets = torch.from_numpy(targets)
 #load TensorDataset
 from torch.utils.data import TensorDataset, DataLoader
 train_ds = TensorDataset(inputs, targets)
+train_dl = DataLoader(train_ds, batch_size, shuffle=True)
+
+#initialize weights and biases
+model = torch.nn.Linear(3, 2)
+print(model.weight)
+
+from torch.nn.functional import mse_loss
+from math import sqrt
+
+loss = mse_loss(model(inputs), targets)
+print(sqrt(loss))
+
+#define optimizer
+opt = torch.optim.SGD(model.parameters(), lr=1e-5)
+
+
+def fit(epochs, model, loss_fn, opt, train_dl):
+    for epoch in range(epochs):
+
+        #train w/ batches of data instead of the whole thing
+            for xb, yb in train_dl:
+
+                    pred = model(xb)
+                    loss = loss_fn(pred, yb)
+                    
+                    #compute gradients
+                    loss.backward()
+
+                    #update then reset
+                    opt.step()
+                    opt.zero_grad()
+
+
+                    '''
+                    Before, we did this
+
+                    pred = model(input)
+                    loss = msqe(pred, targets)
+                    loss.backward()
+
+                    with torch.no_grad():
+                        w -= w.grad * alpha
+                        b -= b.grad * alpha
+
+                        w.grad.zero_()
+                        b.grad.zero_()
+
+                    '''
+
+
+                    #print the progress
+
+            if (epoch+1) %10 == 0:
+                print(f'epoch {epoch+1}/{epochs}, loss: {loss.item():.4f}')
+
+
+fit(150, model=model, loss_fn = mse_loss, opt=opt, train_dl=train_dl)
+
+preds = model(inputs)
+print(targets)
+print(preds)
